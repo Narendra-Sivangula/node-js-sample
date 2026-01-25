@@ -26,12 +26,14 @@ pipeline {
           ).trim()
 
           env.GIT_BRANCH_NAME = env.BRANCH_NAME
+          def message = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
 
           echo """
           BUILD_ID      : ${env.BUILD_ID_CUSTOM}
           COMMIT_ID     : ${env.GIT_COMMIT_ID}
           AUTHOR        : ${env.GIT_AUTHOR}
           BRANCH        : ${env.GIT_BRANCH_NAME}
+          COMMIT_MESSAGE : ${message}
           """
         }
       }
