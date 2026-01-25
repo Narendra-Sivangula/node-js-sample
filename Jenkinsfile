@@ -4,7 +4,7 @@ pipeline {
   environment {
     BUILD_ID_CUSTOM = "${env.JOB_NAME}-${env.BUILD_NUMBER}"
   }
-
+// Start of stages
   stages {
     stage('Checkout') {
       steps {
