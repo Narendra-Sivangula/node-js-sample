@@ -1,41 +1,48 @@
 pipeline {
   agent any
 
-  environment {
-    BUILD_ID_CUSTOM = "${env.JOB_NAME}-${env.BUILD_NUMBER}"
-  }
-// Start of stages
   stages {
+
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
 
-    stage('Extract Commit Metadata') {
+    stage('Capture Build Metadata') {
       steps {
         script {
-          env.GIT_COMMIT_ID = sh(
-            script: "git rev-parse HEAD",
-            returnStdout: true
-          ).trim()
+          env.BUILD_ID_TRACE = "${env.JOB_NAME}-${env.BUILD_NUMBER}"
+          env.COMMIT_ID = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
+          env.COMMIT_MESSAGE = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
+          env.AUTHOR = sh(script: "git show -s --format='%an <%ae>' HEAD", returnStdout: true).trim()
 
-          env.GIT_AUTHOR = sh(
-            script: "git show -s --format='%an <%ae>' HEAD",
-            returnStdout: true
-          ).trim()
+          def payload = [
+            build_id: env.BUILD_ID_TRACE,
+            job_name: env.JOB_NAME,
+            build_number: env.BUILD_NUMBER.toInteger(),
+            branch: env.BRANCH_NAME,
+            commit_id: env.COMMIT_ID,
+            commit_message: env.COMMIT_MESSAGE,
+            author: env.AUTHOR,
+            build_status: currentBuild.currentResult,
+            timestamp: new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
+          ]
 
-          env.GIT_BRANCH_NAME = env.BRANCH_NAME
-          def message = sh(script: "git log -1 --pretty=%B", returnStdout: true).trim()
-
-          echo """
-          BUILD_ID      : ${env.BUILD_ID_CUSTOM}
-          COMMIT_ID     : ${env.GIT_COMMIT_ID}
-          AUTHOR        : ${env.GIT_AUTHOR}
-          BRANCH        : ${env.GIT_BRANCH_NAME}
-          COMMIT_MESSAGE : ${message}
-          """
+          writeFile file: 'build-metadata.json',
+            text: groovy.json.JsonOutput.toJson(payload)
         }
+      }
+    }
+
+    stage('Store Metadata in OpenSearch') {
+      steps {
+        sh """
+          curl -s -X POST \
+            http://opensearch.observability.svc.cluster.local:9200/ci-build-metadata/_doc \
+            -H 'Content-Type: application/json' \
+            -d @build-metadata.json
+        """
       }
     }
   }
