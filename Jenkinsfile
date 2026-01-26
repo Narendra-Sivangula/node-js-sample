@@ -80,9 +80,12 @@ pipeline {
     }
 
 stage('Build & Push Docker Image') {
-  agent {
-    kubernetes {
-      yaml """
+  steps {
+    script {
+      def imageRef = "narendrasivangula/node-js:${env.IMAGE_TAG}"
+
+      podTemplate(
+        yaml: """
 apiVersion: v1
 kind: Pod
 spec:
@@ -94,7 +97,7 @@ spec:
     args:
       - --dockerfile=/workspace/Dockerfile
       - --context=/workspace
-      - --destination=narendrasivangula/node-js:${IMAGE_TAG}
+      - --destination=${imageRef}
     volumeMounts:
       - name: workspace-volume
         mountPath: /workspace
@@ -105,14 +108,17 @@ spec:
     secret:
       secretName: dockerhub-creds
 """
-    }
-  }
-  steps {
-    container('kaniko') {
-      sh 'echo "Kaniko building image from /workspace"'
+      ) {
+        node(POD_LABEL) {
+          container('kaniko') {
+            sh 'echo "Kaniko building image: ${imageRef}"'
+          }
+        }
+      }
     }
   }
 }
+
 
 
 
