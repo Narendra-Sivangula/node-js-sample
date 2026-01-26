@@ -79,36 +79,40 @@ pipeline {
       }
     }
 
-    stage('Build & Push Docker Image') {
+stage('Build & Push Docker Image') {
+  agent {
+    kubernetes {
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
+    args:
+      - --dockerfile=Dockerfile
+      - --context=dir:///workspace
+      - --destination=${IMAGE_NAME}
+    volumeMounts:
+      - name: docker-config
+        mountPath: /kaniko/.docker
+    workingDir: /workspace
+  volumes:
+  - name: docker-config
+    secret:
+      secretName: dockerhub-creds
+"""
+    }
+  }
   steps {
-    script {
-
-      env.SHORT_COMMIT = sh(
-      script: "git rev-parse --short HEAD",
-      returnStdout: true  
-    ).trim()
-      env.IMAGE_TAG = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
-      env.IMAGE_NAME = "narendrasivangula/node-js:${env.IMAGE_TAG}"
-
-      withCredentials([usernamePassword(
-        credentialsId: 'dockerhub-creds',
-        usernameVariable: 'DOCKER_USER',
-        passwordVariable: 'DOCKER_PASS'
-      )]) {
-
-        sh '''
-          echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-
-          docker build -t "$IMAGE_NAME" .
-
-          docker push "$IMAGE_NAME"
-
-          docker logout
-        '''
-      }
+    container('kaniko') {
+      sh '''
+        echo "Building and pushing image via Kaniko"
+      '''
     }
   }
 }
+
 
 
     stage('Store Metadata in OpenSearch') {
