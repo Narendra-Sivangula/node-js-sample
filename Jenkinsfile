@@ -103,16 +103,26 @@ spec:
 
   steps {
     container('kaniko') {
-      sh """
-        /kaniko/executor \
-          --dockerfile=\$WORKSPACE/Dockerfile \
-          --context=\$WORKSPACE \
-          --destination=narendrasivangula/node-js:${IMAGE_TAG} \
-          --verbosity=info
-      """
+      script {
+        def shortCommit = sh(
+          script: "git rev-parse --short HEAD",
+          returnStdout: true
+        ).trim()
+
+        def imageTag = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${shortCommit}"
+
+        sh """
+          /kaniko/executor \
+            --dockerfile=\$WORKSPACE/Dockerfile \
+            --context=\$WORKSPACE \
+            --destination=narendrasivangula/node-js:${imageTag} \
+            --verbosity=info
+        """
+      }
     }
   }
 }
+
 
 
 
