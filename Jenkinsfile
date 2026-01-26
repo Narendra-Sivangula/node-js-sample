@@ -92,12 +92,12 @@ spec:
     command:
       - /kaniko/executor
     args:
-      - --dockerfile=\$(WORKSPACE)/Dockerfile
-      - --context=\$(WORKSPACE)
-      - --destination=${IMAGE_NAME}
+      - --dockerfile=/workspace/Dockerfile
+      - --context=/workspace
+      - --destination=narendrasivangula/node-js:${IMAGE_TAG}
     volumeMounts:
       - name: workspace-volume
-        mountPath: /home/jenkins/agent
+        mountPath: /workspace
       - name: docker-config
         mountPath: /kaniko/.docker
   volumes:
@@ -109,7 +109,7 @@ spec:
   }
   steps {
     container('kaniko') {
-      sh 'echo "Building and pushing image via Kaniko - $WORKSPACE"'
+      sh 'echo "Kaniko building image from /workspace"'
     }
   }
 }
