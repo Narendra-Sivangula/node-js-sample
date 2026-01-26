@@ -95,15 +95,18 @@ spec:
     command:
       - /kaniko/executor
     args:
-      - --dockerfile=/workspace/Dockerfile
-      - --context=/workspace
+      - --dockerfile=/home/jenkins/agent/workspace/Node-JS_master/Dockerfile
+      - --context=/home/jenkins/agent/workspace/Node-JS_master
       - --destination=${imageRef}
+      - --verbosity=info
     volumeMounts:
       - name: workspace-volume
-        mountPath: /workspace
+        mountPath: /home/jenkins/agent
       - name: docker-config
         mountPath: /kaniko/.docker
   volumes:
+  - name: workspace-volume
+    emptyDir: {}
   - name: docker-config
     secret:
       secretName: dockerhub-creds
@@ -118,6 +121,7 @@ spec:
     }
   }
 }
+
 
 
 
