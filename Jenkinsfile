@@ -80,47 +80,40 @@ pipeline {
     }
 
 stage('Build & Push Docker Image') {
-  steps {
-    script {
-      def imageRef = "narendrasivangula/node-js:${env.IMAGE_TAG}"
-
-      podTemplate(
-        yaml: """
+  agent {
+    kubernetes {
+      yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
-    command:
-      - /kaniko/executor
-    args:
-      - --dockerfile=/home/jenkins/agent/workspace/Node-JS_master/Dockerfile
-      - --context=/home/jenkins/agent/workspace/Node-JS_master
-      - --destination=${imageRef}
-      - --verbosity=info
+    tty: true
     volumeMounts:
-      - name: workspace-volume
-        mountPath: /home/jenkins/agent
-      - name: docker-config
-        mountPath: /kaniko/.docker
+    - name: docker-config
+      mountPath: /kaniko/.docker
   volumes:
-  - name: workspace-volume
-    emptyDir: {}
   - name: docker-config
     secret:
       secretName: dockerhub-creds
 """
-      ) {
-        node(POD_LABEL) {
-          container('kaniko') {
-            sh 'echo "Kaniko building image: ${imageRef}"'
-          }
-        }
-      }
+    }
+  }
+
+  steps {
+    container('kaniko') {
+      sh """
+        /kaniko/executor \
+          --dockerfile=\$WORKSPACE/Dockerfile \
+          --context=\$WORKSPACE \
+          --destination=narendrasivangula/node-js:${IMAGE_TAG} \
+          --verbosity=info
+      """
     }
   }
 }
+
 
 
 
