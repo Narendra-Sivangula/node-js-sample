@@ -96,15 +96,15 @@ pipeline {
         passwordVariable: 'DOCKER_PASS'
       )]) {
 
-        sh """
-          echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+        sh '''
+          echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-          docker build -t ${IMAGE_NAME} .
+          docker build -t "$IMAGE_NAME" .
 
-          docker push ${IMAGE_NAME}
+          docker push "$IMAGE_NAME"
 
           docker logout
-        """
+        '''
       }
     }
   }
