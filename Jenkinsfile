@@ -46,11 +46,23 @@ pipeline {
             }
           }
 
+          // Image metadata (must match Build & Push stage)
+      env.SHORT_COMMIT = sh(
+      script: "git rev-parse --short HEAD",
+      returnStdout: true  
+    ).trim()
+
+    env.IMAGE_TAG = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
+    env.IMAGE_NAME = "narendrasivangula/node-js"
+
+
           def payload = [
             build_id    : env.BUILD_ID_TRACE,
             job_name    : env.JOB_NAME,
             build_number: env.BUILD_NUMBER.toInteger(),
             branch      : env.BRANCH_NAME,
+            image_name   : env.IMAGE_NAME,
+            image_tag    : env.IMAGE_TAG,
             commits     : commitList,
             authors     : authorSet.toList(),
             build_status: currentBuild.currentResult,
@@ -66,6 +78,38 @@ pipeline {
         }
       }
     }
+
+    stage('Build & Push Docker Image') {
+  steps {
+    script {
+
+      env.SHORT_COMMIT = sh(
+      script: "git rev-parse --short HEAD",
+      returnStdout: true  
+    ).trim()
+      env.IMAGE_TAG = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
+      env.IMAGE_NAME = "narendrasivangula/node-js:${env.IMAGE_TAG}"
+
+      withCredentials([usernamePassword(
+        credentialsId: 'dockerhub-creds',
+        usernameVariable: 'DOCKER_USER',
+        passwordVariable: 'DOCKER_PASS'
+      )]) {
+
+        sh """
+          echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+
+          docker build -t ${IMAGE_NAME} .
+
+          docker push ${IMAGE_NAME}
+
+          docker logout
+        """
+      }
+    }
+  }
+}
+
 
     stage('Store Metadata in OpenSearch') {
       steps {
