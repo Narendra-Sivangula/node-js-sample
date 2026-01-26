@@ -89,6 +89,8 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
+    command:
+      - /kaniko/executor
     args:
       - --dockerfile=Dockerfile
       - --context=dir:///workspace
@@ -106,9 +108,7 @@ spec:
   }
   steps {
     container('kaniko') {
-      sh '''
-        echo "Building and pushing image via Kaniko"
-      '''
+      sh 'echo "Building and pushing image via Kaniko"'
     }
   }
 }
