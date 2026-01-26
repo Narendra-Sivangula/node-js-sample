@@ -96,6 +96,8 @@ spec:
       - --context=dir:///workspace
       - --destination=${IMAGE_NAME}
     volumeMounts:
+      - name: workspace-volume
+        mountPath: /home/jenkins/agent/workspace
       - name: docker-config
         mountPath: /kaniko/.docker
     workingDir: /workspace
