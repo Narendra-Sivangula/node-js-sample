@@ -84,7 +84,6 @@ stage("Build & Push Docker Image") {
   steps {
     script {
 
-      // ✅ Run git command in Jenkins agent (not kaniko)
       def safeJob = env.JOB_NAME.toLowerCase()
                       .replaceAll("[^a-z0-9_.-]", "-")
 
@@ -97,7 +96,6 @@ stage("Build & Push Docker Image") {
 
       echo "Building Image Tag: ${imageTag}"
 
-      // ✅ Now run only kaniko build inside container
       podTemplate(yaml: """
 apiVersion: v1
 kind: Pod
@@ -117,8 +115,14 @@ spec:
 """) {
 
         node(POD_LABEL) {
+
+          // ✅ MUST checkout again inside this pod
+          checkout scm
+
           container("kaniko") {
             sh """
+              ls -l ${WORKSPACE}
+
               /kaniko/executor \
                 --dockerfile=${WORKSPACE}/Dockerfile \
                 --context=${WORKSPACE} \
@@ -131,6 +135,7 @@ spec:
     }
   }
 }
+
 
 
 
