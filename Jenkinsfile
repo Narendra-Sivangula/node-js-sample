@@ -79,7 +79,7 @@ pipeline {
       }
     }
 
-stage('Build & Push Docker Image') {
+stage("Build & Push Docker Image") {
   agent {
     kubernetes {
       yaml """
@@ -89,10 +89,8 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:debug
-    command:
-    - sleep
-    args:
-    - 999999
+    command: ["sleep"]
+    args: ["999999"]
     volumeMounts:
     - name: docker-config
       mountPath: /kaniko/.docker
@@ -105,18 +103,31 @@ spec:
   }
 
   steps {
-    container('kaniko') {
+    container("kaniko") {
+      script {
 
-      sh """
-        /kaniko/executor \
-          --dockerfile=${WORKSPACE}/Dockerfile \
-          --context=${WORKSPACE} \
-          --destination=narendrasivangula/node-js:${IMAGE_TAG} \
-          --verbosity=info
-      """
+        def safeJob = env.JOB_NAME.toLowerCase()
+                        .replaceAll("[^a-z0-9_.-]", "-")
+
+        def shortCommit = sh(
+          script: "git rev-parse --short HEAD",
+          returnStdout: true
+        ).trim()
+
+        def imageTag = "${safeJob}-${env.BUILD_NUMBER}-${shortCommit}"
+
+        sh """
+          /kaniko/executor \
+            --dockerfile=${WORKSPACE}/Dockerfile \
+            --context=${WORKSPACE} \
+            --destination=narendrasivangula/node-js:${imageTag} \
+            --verbosity=info
+        """
+      }
     }
   }
 }
+
 
 
 
