@@ -130,7 +130,7 @@ spec:
               /kaniko/executor \
                 --dockerfile=${WORKSPACE}/Dockerfile \
                 --context=${WORKSPACE} \
-                --destination=narendrasivangula/node-js:${imageTag} \
+                --destination=narendra115c/node-js:${imageTag} \
                 --verbosity=info
             """
           }
