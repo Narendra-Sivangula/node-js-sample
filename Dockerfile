@@ -16,7 +16,7 @@ ARG JOB_NAME
 LABEL ci.build_id="$BUILD_ID"\
       ci.image_id="$IMAGE_TAG"\
       ci.job_name="$JOB_NAME"
-# ----------------------------------------------------
+# -----------------------------------------------------
 
 EXPOSE 3000
 
