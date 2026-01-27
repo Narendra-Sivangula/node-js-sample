@@ -112,7 +112,10 @@ spec:
   volumes:
   - name: docker-config
     secret:
-      secretName: dockerhub-creds
+      secretName: dockerhub-creds-configjson
+      items:
+      - key: config.json
+        path: config.json
 """) {
 
         node(POD_LABEL) {
