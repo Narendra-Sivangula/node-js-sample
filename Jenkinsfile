@@ -89,36 +89,37 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
+    command:
+    - cat
     tty: true
+
     volumeMounts:
     - name: docker-config
       mountPath: /kaniko/.docker
+
+    - name: workspace-volume
+      mountPath: /workspace
+
   volumes:
   - name: docker-config
     secret:
       secretName: dockerhub-creds
+
+  - name: workspace-volume
+    emptyDir: {}
 """
     }
   }
 
   steps {
     container('kaniko') {
-      script {
-        def shortCommit = sh(
-          script: "git rev-parse --short HEAD",
-          returnStdout: true
-        ).trim()
-
-        def imageTag = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${shortCommit}"
-
-        sh """
-          /kaniko/executor \
-            --dockerfile=\$WORKSPACE/Dockerfile \
-            --context=\$WORKSPACE \
-            --destination=narendrasivangula/node-js:${imageTag} \
-            --verbosity=info
-        """
-      }
+      sh """
+        /kaniko/executor \
+          --dockerfile=/workspace/Dockerfile \
+          --context=/workspace \
+          --destination=narendrasivangula/node-js:${IMAGE_TAG} \
+          --verbosity=info
+      """
     }
   }
 }
