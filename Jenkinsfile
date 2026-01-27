@@ -89,9 +89,11 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
-    command:
-    - cat
-    tty: true
+    args:
+    - "--dockerfile=/workspace/Dockerfile"
+    - "--context=/workspace"
+    - "--destination=narendrasivangula/node-js:${IMAGE_TAG}"
+    - "--verbosity=info"
 
     volumeMounts:
     - name: docker-config
@@ -99,6 +101,8 @@ spec:
 
     - name: workspace-volume
       mountPath: /workspace
+
+  restartPolicy: Never
 
   volumes:
   - name: docker-config
@@ -113,16 +117,11 @@ spec:
 
   steps {
     container('kaniko') {
-      sh """
-        /kaniko/executor \
-          --dockerfile=/workspace/Dockerfile \
-          --context=/workspace \
-          --destination=narendrasivangula/node-js:${IMAGE_TAG} \
-          --verbosity=info
-      """
+      echo "Kaniko build started..."
     }
   }
 }
+
 
 
 
