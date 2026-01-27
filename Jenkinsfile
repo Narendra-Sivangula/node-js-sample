@@ -80,9 +80,25 @@ pipeline {
     }
 
 stage("Build & Push Docker Image") {
-  agent {
-    kubernetes {
-      yaml """
+
+  steps {
+    script {
+
+      // ✅ Run git command in Jenkins agent (not kaniko)
+      def safeJob = env.JOB_NAME.toLowerCase()
+                      .replaceAll("[^a-z0-9_.-]", "-")
+
+      def shortCommit = sh(
+        script: "git rev-parse --short HEAD",
+        returnStdout: true
+      ).trim()
+
+      def imageTag = "${safeJob}-${env.BUILD_NUMBER}-${shortCommit}"
+
+      echo "Building Image Tag: ${imageTag}"
+
+      // ✅ Now run only kaniko build inside container
+      podTemplate(yaml: """
 apiVersion: v1
 kind: Pod
 spec:
@@ -98,35 +114,24 @@ spec:
   - name: docker-config
     secret:
       secretName: dockerhub-creds
-"""
-    }
-  }
+""") {
 
-  steps {
-    container("kaniko") {
-      script {
-
-        def safeJob = env.JOB_NAME.toLowerCase()
-                        .replaceAll("[^a-z0-9_.-]", "-")
-
-        def shortCommit = sh(
-          script: "git rev-parse --short HEAD",
-          returnStdout: true
-        ).trim()
-
-        def imageTag = "${safeJob}-${env.BUILD_NUMBER}-${shortCommit}"
-
-        sh """
-          /kaniko/executor \
-            --dockerfile=${WORKSPACE}/Dockerfile \
-            --context=${WORKSPACE} \
-            --destination=narendrasivangula/node-js:${imageTag} \
-            --verbosity=info
-        """
+        node(POD_LABEL) {
+          container("kaniko") {
+            sh """
+              /kaniko/executor \
+                --dockerfile=${WORKSPACE}/Dockerfile \
+                --context=${WORKSPACE} \
+                --destination=narendrasivangula/node-js:${imageTag} \
+                --verbosity=info
+            """
+          }
+        }
       }
     }
   }
 }
+
 
 
 
