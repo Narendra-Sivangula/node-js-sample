@@ -88,36 +88,32 @@ kind: Pod
 spec:
   containers:
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
+    image: gcr.io/kaniko-project/executor:debug
+    command:
+    - sleep
     args:
-    - "--dockerfile=/workspace/Dockerfile"
-    - "--context=/workspace"
-    - "--destination=narendrasivangula/node-js:${IMAGE_TAG}"
-    - "--verbosity=info"
-
+    - 999999
     volumeMounts:
     - name: docker-config
       mountPath: /kaniko/.docker
-
-    - name: workspace-volume
-      mountPath: /workspace
-
-  restartPolicy: Never
-
   volumes:
   - name: docker-config
     secret:
       secretName: dockerhub-creds
-
-  - name: workspace-volume
-    emptyDir: {}
 """
     }
   }
 
   steps {
     container('kaniko') {
-      echo "Kaniko build started..."
+
+      sh """
+        /kaniko/executor \
+          --dockerfile=${WORKSPACE}/Dockerfile \
+          --context=${WORKSPACE} \
+          --destination=narendrasivangula/node-js:${IMAGE_TAG} \
+          --verbosity=info
+      """
     }
   }
 }
