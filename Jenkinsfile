@@ -131,6 +131,9 @@ spec:
                 --dockerfile=${WORKSPACE}/Dockerfile \
                 --context=${WORKSPACE} \
                 --destination=narendra115c/node-js:${imageTag} \
+                --build-arg BUILD_ID=${env.BUILD_ID_TRACE}\
+                --build-arg IMAGE_TAG=${imageTag}\
+                --build-arg JOB_NAME=${env.JOB_NAME}\
                 --verbosity=info
             """
           }
