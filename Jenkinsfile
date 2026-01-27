@@ -9,6 +9,7 @@ pipeline {
       }
     }
 
+    
     stage('Capture Build Metadata') {
       steps {
         script {
