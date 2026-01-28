@@ -152,16 +152,17 @@ env.IMAGE_DIGEST = sh(
 ).trim()
 
 echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
-sh """
-  jq '. + { "image_digest": "${env.IMAGE_DIGEST}" }' \
-    build-metadata.json > build-metadata-updated.json
-
-  mv build-metadata-updated.json build-metadata.json
-"""
 
 if (!env.IMAGE_DIGEST) {
   error "❌ IMAGE DIGEST NOT FOUND — Kaniko output parsing failed"
 }
+script {
+  def json = readJSON file: 'build-metadata.json'
+  json.image_digest = env.IMAGE_DIGEST
+
+  writeJSON file: 'build-metadata.json', json: json, pretty: 4
+}
+
 
 }
         }
