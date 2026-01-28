@@ -64,7 +64,6 @@ pipeline {
   branch        : env.BRANCH_NAME,
   image_name    : env.IMAGE_NAME,
   image_tag     : env.IMAGE_TAG,
-  image_digest  : env.IMAGE_DIGEST,   // 🔥 ADD THIS
   commits       : commitList,
   authors       : authorSet.toList(),
   build_status  : currentBuild.currentResult,
@@ -153,6 +152,12 @@ env.IMAGE_DIGEST = sh(
 ).trim()
 
 echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
+sh """
+  jq '. + { "image_digest": "${env.IMAGE_DIGEST}" }' \
+    build-metadata.json > build-metadata-updated.json
+
+  mv build-metadata-updated.json build-metadata.json
+"""
 
 if (!env.IMAGE_DIGEST) {
   error "❌ IMAGE DIGEST NOT FOUND — Kaniko output parsing failed"
@@ -164,11 +169,6 @@ if (!env.IMAGE_DIGEST) {
     }
   }
 }
-
-
-
-
-
 
 
 
