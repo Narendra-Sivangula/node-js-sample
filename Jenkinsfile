@@ -157,11 +157,19 @@ if (!env.IMAGE_DIGEST) {
   error "❌ IMAGE DIGEST NOT FOUND — Kaniko output parsing failed"
 }
 script {
-  def json = readJSON file: 'build-metadata.json'
+  def jsonText = readFile('build-metadata.json')
+  def json = new groovy.json.JsonSlurper().parseText(jsonText)
+
   json.image_digest = env.IMAGE_DIGEST
 
-  writeJSON file: 'build-metadata.json', json: json, pretty: 4
+  writeFile(
+    file: 'build-metadata.json',
+    text: groovy.json.JsonOutput.prettyPrint(
+      groovy.json.JsonOutput.toJson(json)
+    )
+  )
 }
+
 
 
 }
