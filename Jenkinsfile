@@ -128,17 +128,19 @@ spec:
 container("kaniko") {
 
   def kanikoOutput = sh(
-    script: """
-      /kaniko/executor \
-        --dockerfile=${WORKSPACE}/Dockerfile \
-        --context=${WORKSPACE} \
-        --destination=narendra115c/node-js:${imageTag} \
-        --verbosity=info
-    """,
-    returnStdout: true
-  ).trim()
+  script: """
+    /kaniko/executor \
+      --dockerfile=${WORKSPACE}/Dockerfile \
+      --context=${WORKSPACE} \
+      --destination=narendra115c/node-js:${imageTag} \
+      --verbosity=info 2>&1
+  """,
+  returnStdout: true
+).trim()
 
-  echo kanikoOutput
+echo "===== KANIKO FULL OUTPUT ====="
+echo kanikoOutput
+
 
   // 🔥 Extract image digest
   env.IMAGE_DIGEST = sh(
@@ -149,6 +151,9 @@ container("kaniko") {
   ).trim()
 
   echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
+  if (!env.IMAGE_DIGEST) {
+  error "❌ IMAGE DIGEST NOT FOUND — Kaniko output parsing failed"
+}
 }
         }
       }
