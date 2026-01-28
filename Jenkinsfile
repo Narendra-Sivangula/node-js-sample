@@ -58,17 +58,19 @@ pipeline {
 
 
           def payload = [
-            build_id    : env.BUILD_ID_TRACE,
-            job_name    : env.JOB_NAME,
-            build_number: env.BUILD_NUMBER.toInteger(),
-            branch      : env.BRANCH_NAME,
-            image_name   : env.IMAGE_NAME,
-            image_tag    : env.IMAGE_TAG,
-            commits     : commitList,
-            authors     : authorSet.toList(),
-            build_status: currentBuild.currentResult,
-            timestamp   : new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
-          ]
+  build_id      : env.BUILD_ID_TRACE,
+  job_name      : env.JOB_NAME,
+  build_number  : env.BUILD_NUMBER.toInteger(),
+  branch        : env.BRANCH_NAME,
+  image_name    : env.IMAGE_NAME,
+  image_tag     : env.IMAGE_TAG,
+  image_digest  : env.IMAGE_DIGEST,   // 🔥 ADD THIS
+  commits       : commitList,
+  authors       : authorSet.toList(),
+  build_status  : currentBuild.currentResult,
+  timestamp     : new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
+]
+
 
           writeFile(
             file: 'build-metadata.json',
@@ -123,20 +125,31 @@ spec:
           // ✅ MUST checkout again inside this pod
           checkout scm
 
-          container("kaniko") {
-            sh """
-              ls -l ${WORKSPACE}
+container("kaniko") {
 
-              /kaniko/executor \
-                --dockerfile=${WORKSPACE}/Dockerfile \
-                --context=${WORKSPACE} \
-                --destination=narendra115c/node-js:${imageTag} \
-                --build-arg BUILD_ID=${env.BUILD_ID_TRACE}\
-                --build-arg IMAGE_TAG=${imageTag}\
-                --build-arg JOB_NAME=${env.JOB_NAME}\
-                --verbosity=info
-            """
-          }
+  def kanikoOutput = sh(
+    script: """
+      /kaniko/executor \
+        --dockerfile=${WORKSPACE}/Dockerfile \
+        --context=${WORKSPACE} \
+        --destination=narendra115c/node-js:${imageTag} \
+        --verbosity=info
+    """,
+    returnStdout: true
+  ).trim()
+
+  echo kanikoOutput
+
+  // 🔥 Extract image digest
+  env.IMAGE_DIGEST = sh(
+    script: """
+      echo '${kanikoOutput}' | grep 'Digest:' | awk '{print \$2}'
+    """,
+    returnStdout: true
+  ).trim()
+
+  echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
+}
         }
       }
     }
