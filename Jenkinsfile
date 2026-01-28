@@ -143,17 +143,21 @@ echo kanikoOutput
 
 
   // 🔥 Extract image digest
-  env.IMAGE_DIGEST = sh(
-    script: """
-      echo '${kanikoOutput}' | grep 'Digest:' | awk '{print \$2}'
-    """,
-    returnStdout: true
-  ).trim()
+env.IMAGE_DIGEST = sh(
+  script: """
+    echo '${kanikoOutput}' \
+    | grep -o 'sha256:[a-f0-9]\\{64\\}' \
+    | head -n 1
+  """,
+  returnStdout: true
+).trim()
 
-  echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
-  if (!env.IMAGE_DIGEST) {
+echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
+
+if (!env.IMAGE_DIGEST) {
   error "❌ IMAGE DIGEST NOT FOUND — Kaniko output parsing failed"
 }
+
 }
         }
       }
