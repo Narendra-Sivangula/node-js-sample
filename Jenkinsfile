@@ -9,23 +9,19 @@ pipeline {
       }
     }
 
-     
     stage('Capture Build Metadata') {
       steps {
         script {
 
           env.BUILD_ID_TRACE = "${env.JOB_NAME}-${env.BUILD_NUMBER}"
 
-          // Determine commit range
           def commitRange = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?
             "${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT}..HEAD" :
             "HEAD~20..HEAD"
 
-          // Collect commits
           def rawCommits = sh(
             script: """
-              git log ${commitRange} \
-              --pretty=format:'%H|%an|%ae|%s'
+              git log ${commitRange} --pretty=format:'%H|%an|%ae|%s'
             """,
             returnStdout: true
           ).trim()
@@ -36,40 +32,36 @@ pipeline {
           if (rawCommits) {
             rawCommits.split("\\n").each { line ->
               def parts = line.split("\\|", 4)
-              def commitObj = [
+              commitList << [
                 commit_id: parts[0],
-                author: parts[1],
-                email: parts[2],
-                message: parts[3]
+                author   : parts[1],
+                email    : parts[2],
+                message  : parts[3]
               ]
-              commitList << commitObj
               authorSet << "${parts[1]} <${parts[2]}>"
             }
           }
 
-          // Image metadata (must match Build & Push stage)
-      env.SHORT_COMMIT = sh(
-      script: "git rev-parse --short HEAD",
-      returnStdout: true  
-    ).trim()
+          env.SHORT_COMMIT = sh(
+            script: "git rev-parse --short HEAD",
+            returnStdout: true
+          ).trim()
 
-    env.IMAGE_TAG = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
-    env.IMAGE_NAME = "narendrasivangula/node-js"
-
+          env.IMAGE_NAME = "narendrasivangula/node-js"
+          env.IMAGE_TAG  = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
 
           def payload = [
-  build_id      : env.BUILD_ID_TRACE,
-  job_name      : env.JOB_NAME,
-  build_number  : env.BUILD_NUMBER.toInteger(),
-  branch        : env.BRANCH_NAME,
-  image_name    : env.IMAGE_NAME,
-  image_tag     : env.IMAGE_TAG,
-  commits       : commitList,
-  authors       : authorSet.toList(),
-  build_status  : currentBuild.currentResult,
-  timestamp     : new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
-]
-
+            build_id     : env.BUILD_ID_TRACE,
+            job_name     : env.JOB_NAME,
+            build_number : env.BUILD_NUMBER.toInteger(),
+            branch       : env.BRANCH_NAME,
+            image_name   : env.IMAGE_NAME,
+            image_tag    : env.IMAGE_TAG,
+            commits      : commitList,
+            authors      : authorSet.toList(),
+            build_status : currentBuild.currentResult,
+            timestamp    : new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
+          ]
 
           writeFile(
             file: 'build-metadata.json',
@@ -78,27 +70,27 @@ pipeline {
             )
           )
         }
+
+        // ✅ CRITICAL
+        stash name: 'build-metadata', includes: 'build-metadata.json'
       }
     }
 
-stage("Build & Push Docker Image") {
+    stage('Build & Push Docker Image') {
+      steps {
+        script {
 
-  steps {
-    script {
+          def safeJob = env.JOB_NAME.toLowerCase()
+            .replaceAll("[^a-z0-9_.-]", "-")
 
-      def safeJob = env.JOB_NAME.toLowerCase()
-                      .replaceAll("[^a-z0-9_.-]", "-")
+          def shortCommit = sh(
+            script: "git rev-parse --short HEAD",
+            returnStdout: true
+          ).trim()
 
-      def shortCommit = sh(
-        script: "git rev-parse --short HEAD",
-        returnStdout: true
-      ).trim()
+          def imageTag = "${safeJob}-${env.BUILD_NUMBER}-${shortCommit}"
 
-      def imageTag = "${safeJob}-${env.BUILD_NUMBER}-${shortCommit}"
-
-      echo "Building Image Tag: ${imageTag}"
-
-      podTemplate(yaml: """
+          podTemplate(yaml: """
 apiVersion: v1
 kind: Pod
 spec:
@@ -114,75 +106,63 @@ spec:
   - name: docker-config
     secret:
       secretName: dockerhub-creds-configjson
-      items:
-      - key: config.json
-        path: config.json
 """) {
 
-        node(POD_LABEL) {
+            node(POD_LABEL) {
 
-          // ✅ MUST checkout again inside this pod
-          checkout scm
+              checkout scm
 
-container("kaniko") {
+              // ✅ RESTORE METADATA FILE
+              unstash 'build-metadata'
 
-  def kanikoOutput = sh(
-  script: """
-    /kaniko/executor \
-      --dockerfile=${WORKSPACE}/Dockerfile \
-      --context=${WORKSPACE} \
-      --destination=narendra115c/node-js:${imageTag} \
-      --verbosity=info 2>&1
-  """,
-  returnStdout: true
-).trim()
+              container("kaniko") {
 
-echo "===== KANIKO FULL OUTPUT ====="
-echo kanikoOutput
+                def kanikoOutput = sh(
+                  script: """
+                    /kaniko/executor \
+                      --dockerfile=${WORKSPACE}/Dockerfile \
+                      --context=${WORKSPACE} \
+                      --destination=narendra115c/node-js:${imageTag} \
+                      --verbosity=info 2>&1
+                  """,
+                  returnStdout: true
+                ).trim()
 
+                echo "===== KANIKO OUTPUT ====="
+                echo kanikoOutput
 
-  // 🔥 Extract image digest
-env.IMAGE_DIGEST = sh(
-  script: """
-    echo '${kanikoOutput}' \
-    | grep -o 'sha256:[a-f0-9]\\{64\\}' \
-    | head -n 1
-  """,
-  returnStdout: true
-).trim()
+                env.IMAGE_DIGEST = sh(
+                  script: """
+                    echo '${kanikoOutput}' | grep -o 'sha256:[a-f0-9]\\{64\\}' | head -n 1
+                  """,
+                  returnStdout: true
+                ).trim()
 
-echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
+                if (!env.IMAGE_DIGEST) {
+                  error "❌ IMAGE DIGEST NOT FOUND"
+                }
 
-if (!env.IMAGE_DIGEST) {
-  error "❌ IMAGE DIGEST NOT FOUND — Kaniko output parsing failed"
-}
-script {
-  def jsonText = readFile('build-metadata.json')
-  def json = new groovy.json.JsonSlurper().parseText(jsonText)
+                echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
+              }
 
-  json.image_digest = env.IMAGE_DIGEST
+              // ✅ Inject digest OUTSIDE container block
+              script {
+                def jsonText = readFile('build-metadata.json')
+                def json = new groovy.json.JsonSlurper().parseText(jsonText)
+                json.image_digest = env.IMAGE_DIGEST
 
-  writeFile(
-    file: 'build-metadata.json',
-    text: groovy.json.JsonOutput.prettyPrint(
-      groovy.json.JsonOutput.toJson(json)
-    )
-  )
-}
-
-
-
-}
+                writeFile(
+                  file: 'build-metadata.json',
+                  text: groovy.json.JsonOutput.prettyPrint(
+                    groovy.json.JsonOutput.toJson(json)
+                  )
+                )
+              }
+            }
+          }
         }
       }
     }
-  }
-}
-
-
-
-
-
 
     stage('Store Metadata in OpenSearch') {
       steps {
