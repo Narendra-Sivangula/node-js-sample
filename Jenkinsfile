@@ -37,12 +37,14 @@ pipeline {
                     if (rawCommits) {
                         rawCommits.split("\\n").each { line ->
                             def parts = line.split("\\|", 4)
+
                             commitList << [
                                 commit_id: parts[0],
                                 author   : parts[1],
                                 email    : parts[2],
                                 message  : parts[3]
                             ]
+
                             authorSet << "${parts[1]} <${parts[2]}>"
                         }
                     }
@@ -140,7 +142,9 @@ spec:
 
                                 env.IMAGE_DIGEST = sh(
                                     script: """
-echo '${kanikoOutput}' | grep -o 'sha256:[a-f0-9]\\{64\\}' | head -n 1
+echo '${kanikoOutput}' \
+ | grep -o 'sha256:[a-f0-9]\\{64\\}' \
+ | head -n 1
 """,
                                     returnStdout: true
                                 ).trim()
@@ -152,18 +156,20 @@ echo '${kanikoOutput}' | grep -o 'sha256:[a-f0-9]\\{64\\}' | head -n 1
                                 echo "IMAGE DIGEST = ${env.IMAGE_DIGEST}"
                             }
 
-                            // -------- JSON DIGEST INJECTION --------
-                            sh """
-echo "===== BEFORE INJECTION ====="
-cat build-metadata.json
+                            // Inject digest into JSON
+                            sh '''
+tmp=$(mktemp)
+head -n -1 build-metadata.json > $tmp
+echo '  ,"image_digest": "'"$IMAGE_DIGEST"'"' >> $tmp
+echo '}' >> $tmp
+mv $tmp build-metadata.json
+'''
 
-truncate -s -1 build-metadata.json
-echo ', "image_digest": "${IMAGE_DIGEST}"}' >> build-metadata.json
+                            echo "===== AFTER INJECTION ====="
+                            sh "cat build-metadata.json"
 
-echo "===== AFTER INJECTION ====="
-cat build-metadata.json
-"""
-                            // ---------------------------------------
+                            // IMPORTANT: Re-stash updated file
+                            stash name: 'build-metadata-updated', includes: 'build-metadata.json'
                         }
                     }
                 }
@@ -175,6 +181,10 @@ cat build-metadata.json
         // ---------------------------------------
         stage('Store Metadata in OpenSearch') {
             steps {
+
+                // Unstash updated metadata
+                unstash 'build-metadata-updated'
+
                 sh """
 echo "===== FINAL METADATA ====="
 cat build-metadata.json
