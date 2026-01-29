@@ -143,7 +143,7 @@ spec:
 
               // ✅ SAFE JSON UPDATE (TEXT ONLY — NO GROOVY PARSING)
               sh """
-                    sed -i 's/}\$/,\n  "image_digest": "${IMAGE_DIGEST}"\n}/' build-metadata.json
+                sed -i 's/}\$/,\n  "image_digest": "${IMAGE_DIGEST}"\n}/' build-metadata.json
                   """
 
 
