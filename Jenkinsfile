@@ -68,7 +68,6 @@ pipeline {
           )
         }
 
-        // ✅ Persist metadata across pods
         stash name: 'build-metadata', includes: 'build-metadata.json'
       }
     }
@@ -111,6 +110,7 @@ spec:
               unstash 'build-metadata'
 
               container("kaniko") {
+
                 def kanikoOutput = sh(
                   script: """
                     /kaniko/executor \
@@ -141,22 +141,12 @@ spec:
                 echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
               }
 
-              // ✅ SAFE JSON UPDATE (NO LazyMap, NO CPS issues)
-              script {
-                def meta = new groovy.json.JsonSlurperClassic()
-                  .parseText(readFile('build-metadata.json'))
+              // ✅ SAFE JSON UPDATE (TEXT ONLY — NO GROOVY PARSING)
+              sh """
+                sed -i 's/}\$/,\n  "image_digest": "${IMAGE_DIGEST}"\n}/' build-metadata.json
+              """
 
-                meta.image_digest = env.IMAGE_DIGEST
-
-                writeFile(
-                  file: 'build-metadata.json',
-                  text: groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(meta)
-                  )
-                )
-
-                echo "🧬 build-metadata.json updated with image_digest"
-              }
+              echo "🧬 image_digest injected into build-metadata.json"
             }
           }
         }
@@ -166,7 +156,7 @@ spec:
     stage('Store Metadata in OpenSearch') {
       steps {
         sh """
-          echo "===== FINAL METADATA SENT TO OPENSEARCH ====="
+          echo "===== FINAL METADATA ====="
           cat build-metadata.json
 
           curl -s -X POST \
