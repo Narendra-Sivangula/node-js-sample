@@ -12,7 +12,6 @@ pipeline {
     stage('Capture Build Metadata') {
       steps {
         script {
-
           env.BUILD_ID_TRACE = "${env.JOB_NAME}-${env.BUILD_NUMBER}"
 
           def commitRange = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?
@@ -20,9 +19,7 @@ pipeline {
             "HEAD~20..HEAD"
 
           def rawCommits = sh(
-            script: """
-              git log ${commitRange} --pretty=format:'%H|%an|%ae|%s'
-            """,
+            script: "git log ${commitRange} --pretty=format:'%H|%an|%ae|%s'",
             returnStdout: true
           ).trim()
 
@@ -71,7 +68,7 @@ pipeline {
           )
         }
 
-        // ✅ CRITICAL
+        // ✅ Persist metadata across pods
         stash name: 'build-metadata', includes: 'build-metadata.json'
       }
     }
@@ -111,12 +108,9 @@ spec:
             node(POD_LABEL) {
 
               checkout scm
-
-              // ✅ RESTORE METADATA FILE
               unstash 'build-metadata'
 
               container("kaniko") {
-
                 def kanikoOutput = sh(
                   script: """
                     /kaniko/executor \
@@ -133,7 +127,9 @@ spec:
 
                 env.IMAGE_DIGEST = sh(
                   script: """
-                    echo '${kanikoOutput}' | grep -o 'sha256:[a-f0-9]\\{64\\}' | head -n 1
+                    echo '${kanikoOutput}' \
+                    | grep -o 'sha256:[a-f0-9]\\{64\\}' \
+                    | head -n 1
                   """,
                   returnStdout: true
                 ).trim()
@@ -145,21 +141,21 @@ spec:
                 echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
               }
 
-              // ✅ Inject digest OUTSIDE container block
+              // ✅ SAFE JSON UPDATE (NO LazyMap, NO CPS issues)
               script {
-                def jsonText = readFile('build-metadata.json')
-                def updatedJsonText = groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(
-                    new groovy.json.JsonSlurper()
-                    .parseText(jsonText)
-                    .plus([image_digest: env.IMAGE_DIGEST])
-                    )
-                )
+                def meta = new groovy.json.JsonSlurperClassic()
+                  .parseText(readFile('build-metadata.json'))
+
+                meta.image_digest = env.IMAGE_DIGEST
 
                 writeFile(
-                file: 'build-metadata.json',
-                text: updatedJsonText
-              )
+                  file: 'build-metadata.json',
+                  text: groovy.json.JsonOutput.prettyPrint(
+                    groovy.json.JsonOutput.toJson(meta)
+                  )
+                )
+
+                echo "🧬 build-metadata.json updated with image_digest"
               }
             }
           }
@@ -170,6 +166,9 @@ spec:
     stage('Store Metadata in OpenSearch') {
       steps {
         sh """
+          echo "===== FINAL METADATA SENT TO OPENSEARCH ====="
+          cat build-metadata.json
+
           curl -s -X POST \
             http://opensearch.observability.svc.cluster.local:9200/ci-build-metadata/_doc \
             -H 'Content-Type: application/json' \
