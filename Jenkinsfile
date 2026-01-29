@@ -148,15 +148,18 @@ spec:
               // ✅ Inject digest OUTSIDE container block
               script {
                 def jsonText = readFile('build-metadata.json')
-                def json = new groovy.json.JsonSlurper().parseText(jsonText)
-                json.image_digest = env.IMAGE_DIGEST
+                def updatedJsonText = groovy.json.JsonOutput.prettyPrint(
+                    groovy.json.JsonOutput.toJson(
+                    new groovy.json.JsonSlurper()
+                    .parseText(jsonText)
+                    .plus([image_digest: env.IMAGE_DIGEST])
+                    )
+                )
 
                 writeFile(
-                  file: 'build-metadata.json',
-                  text: groovy.json.JsonOutput.prettyPrint(
-                    groovy.json.JsonOutput.toJson(json)
-                  )
-                )
+                file: 'build-metadata.json',
+                text: updatedJsonText
+              )
               }
             }
           }
