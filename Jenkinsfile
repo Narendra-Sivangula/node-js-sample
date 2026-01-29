@@ -169,9 +169,14 @@ echo '${kanikoOutput}' \
                             }
 
                             // ✅ Inject Digest into Metadata JSON
-                            sh """
-sed -i 's/}\$/,\n "image_digest": "${IMAGE_DIGEST}"\n}/' build-metadata.json
-"""
+                            sh '''
+                            tmp=$(mktemp)
+                            head -n -1 build-metadata.json > $tmp
+                            echo '  ,"image_digest": "'"$IMAGE_DIGEST"'"' >> $tmp
+                            echo '}' >> $tmp
+                            mv $tmp build-metadata.json
+                            '''
+
                             echo "🧬 image_digest injected into build-metadata.json"
                         }
                     }
