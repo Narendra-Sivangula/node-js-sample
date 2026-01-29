@@ -5,7 +5,7 @@ pipeline {
     stages {
 
         // -----------------------------
-        // ✅ Stage 1: Checkout Source
+        // Stage 1: Checkout Source
         // -----------------------------
         stage('Checkout') {
             steps {
@@ -14,21 +14,18 @@ pipeline {
         }
 
         // ---------------------------------------
-        // ✅ Stage 2: Capture Build Metadata
+        // Stage 2: Capture Build Metadata
         // ---------------------------------------
         stage('Capture Build Metadata') {
             steps {
                 script {
 
-                    // Build Trace ID
                     env.BUILD_ID_TRACE = "${env.JOB_NAME}-${env.BUILD_NUMBER}"
 
-                    // Commit Range Logic
                     def commitRange = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?
                         "${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT}..HEAD" :
                         "HEAD~20..HEAD"
 
-                    // Get Raw Commits
                     def rawCommits = sh(
                         script: "git log ${commitRange} --pretty=format:'%H|%an|%ae|%s'",
                         returnStdout: true
@@ -37,23 +34,19 @@ pipeline {
                     def commitList = []
                     def authorSet = [] as Set
 
-                    // Parse Commit Data
                     if (rawCommits) {
                         rawCommits.split("\\n").each { line ->
                             def parts = line.split("\\|", 4)
-
                             commitList << [
                                 commit_id: parts[0],
                                 author   : parts[1],
                                 email    : parts[2],
                                 message  : parts[3]
                             ]
-
                             authorSet << "${parts[1]} <${parts[2]}>"
                         }
                     }
 
-                    // Image Details
                     env.SHORT_COMMIT = sh(
                         script: "git rev-parse --short HEAD",
                         returnStdout: true
@@ -62,7 +55,6 @@ pipeline {
                     env.IMAGE_NAME = "narendrasivangula/node-js"
                     env.IMAGE_TAG  = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
 
-                    // Metadata JSON Payload
                     def payload = [
                         build_id     : env.BUILD_ID_TRACE,
                         job_name     : env.JOB_NAME,
@@ -76,7 +68,6 @@ pipeline {
                         timestamp    : new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
                     ]
 
-                    // Write Metadata File
                     writeFile(
                         file: 'build-metadata.json',
                         text: groovy.json.JsonOutput.prettyPrint(
@@ -85,19 +76,17 @@ pipeline {
                     )
                 }
 
-                // Stash Metadata JSON
                 stash name: 'build-metadata', includes: 'build-metadata.json'
             }
         }
 
         // ---------------------------------------
-        // ✅ Stage 3: Build & Push Docker Image
+        // Stage 3: Build & Push Docker Image
         // ---------------------------------------
         stage('Build & Push Docker Image') {
             steps {
                 script {
 
-                    // Safe Job Name for Docker Tag
                     def safeJob = env.JOB_NAME.toLowerCase()
                         .replaceAll("[^a-z0-9_.-]", "-")
 
@@ -108,7 +97,6 @@ pipeline {
 
                     def imageTag = "${safeJob}-${env.BUILD_NUMBER}-${shortCommit}"
 
-                    // Kaniko Pod Template
                     podTemplate(
                         yaml: """
 apiVersion: v1
@@ -136,7 +124,6 @@ spec:
 
                             container("kaniko") {
 
-                                // Run Kaniko Build
                                 def kanikoOutput = sh(
                                     script: """
 /kaniko/executor \
@@ -151,33 +138,32 @@ spec:
                                 echo "===== KANIKO OUTPUT ====="
                                 echo kanikoOutput
 
-                                // Extract Image Digest
                                 env.IMAGE_DIGEST = sh(
                                     script: """
-echo '${kanikoOutput}' \
- | grep -o 'sha256:[a-f0-9]\\{64\\}' \
- | head -n 1
+echo '${kanikoOutput}' | grep -o 'sha256:[a-f0-9]\\{64\\}' | head -n 1
 """,
                                     returnStdout: true
                                 ).trim()
 
                                 if (!env.IMAGE_DIGEST) {
-                                    error "❌ IMAGE DIGEST NOT FOUND"
+                                    error "IMAGE DIGEST NOT FOUND"
                                 }
 
-                                echo "✅ IMAGE DIGEST = ${env.IMAGE_DIGEST}"
+                                echo "IMAGE DIGEST = ${env.IMAGE_DIGEST}"
                             }
 
-                            // ✅ Inject Digest into Metadata JSON
-                            sh '''
-                            tmp=$(mktemp)
-                            head -n -1 build-metadata.json > $tmp
-                            echo '  ,"image_digest": "'"$IMAGE_DIGEST"'"' >> $tmp
-                            echo '}' >> $tmp
-                            mv $tmp build-metadata.json
-                            '''
+                            // -------- JSON DIGEST INJECTION --------
+                            sh """
+echo "===== BEFORE INJECTION ====="
+cat build-metadata.json
 
-                            echo "🧬 image_digest injected into build-metadata.json"
+truncate -s -1 build-metadata.json
+echo ', "image_digest": "${IMAGE_DIGEST}"}' >> build-metadata.json
+
+echo "===== AFTER INJECTION ====="
+cat build-metadata.json
+"""
+                            // ---------------------------------------
                         }
                     }
                 }
@@ -185,11 +171,10 @@ echo '${kanikoOutput}' \
         }
 
         // ---------------------------------------
-        // ✅ Stage 4: Store Metadata in OpenSearch
+        // Stage 4: Store Metadata in OpenSearch
         // ---------------------------------------
         stage('Store Metadata in OpenSearch') {
             steps {
-
                 sh """
 echo "===== FINAL METADATA ====="
 cat build-metadata.json
