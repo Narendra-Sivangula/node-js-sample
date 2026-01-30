@@ -54,8 +54,10 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    env.IMAGE_NAME = "narendrasivangula/node-js"
-                    env.IMAGE_TAG  = "${env.JOB_NAME}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
+                    env.IMAGE_NAME = "narendra115c/node-js"
+                    def safeJob = env.JOB_NAME.toLowerCase().replaceAll("[^a-z0-9_.-]", "-")
+                    env.IMAGE_TAG = "${safeJob}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
+
 
                     def payload = [
                         build_id     : env.BUILD_ID_TRACE,
@@ -97,7 +99,7 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    def imageTag = "${safeJob}-${env.BUILD_NUMBER}-${shortCommit}"
+                    def imageTag = env.IMAGE_TAG
 
                     podTemplate(
                         yaml: """
@@ -131,7 +133,7 @@ spec:
 /kaniko/executor \
   --dockerfile=${WORKSPACE}/Dockerfile \
   --context=${WORKSPACE} \
-  --destination=narendra115c/node-js:${imageTag} \
+  --destination=${env.IMAGE_NAME}:${env.IMAGE_TAG} \
   --verbosity=info 2>&1
 """,
                                     returnStdout: true
@@ -176,22 +178,34 @@ mv $tmp build-metadata.json
             }
         }
 
-stage('Update Deployment Repo') {
+stage("Update Deployment Repo") {
   steps {
-    sh """
-      git clone https://github.com/Narendra-Sivangula/node-js-deployment.git
-      cd node-js-deployment
+    withCredentials([usernamePassword(
+      credentialsId: 'github-status-token',
+      usernameVariable: 'GIT_USER',
+      passwordVariable: 'GIT_TOKEN'
+    )]) {
 
-      sed -i 's|image:.*|image: narendrasivangula/node-js:${IMAGE_TAG}|' deployment.yaml
+      sh '''
+        rm -rf node-js-deployment
 
-      git config user.email "narendrakumarsivangula@gmail.com"
-      git config user.name "Narendra-Sivangula"
+        git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/Narendra-Sivangula/node-js-deployment.git
+        cd node-js-deployment
 
-      git commit -am "update image ${IMAGE_TAG}"
-      git push
-    """
+        sed -i "s|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|" deployment.yaml
+
+        git config user.email "narendrakumarsivangula@gmail.com"
+        git config user.name "Narendra-Sivangula"
+
+        git add deployment.yaml
+        git commit -m "update image ${IMAGE_TAG}" || echo "No changes to commit"
+
+        git push origin main
+      '''
+    }
   }
 }
+
 
         
 
