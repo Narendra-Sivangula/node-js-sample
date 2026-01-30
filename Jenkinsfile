@@ -176,6 +176,25 @@ mv $tmp build-metadata.json
             }
         }
 
+stage('Update Deployment Repo') {
+  steps {
+    sh """
+      git clone https://github.com/Narendra-Sivangula/node-js-deployment.git
+      cd node-js-deployment
+
+      sed -i 's|image:.*|image: narendrasivangula/node-js:${IMAGE_TAG}|' deployment.yaml
+
+      git config user.email "ci@jenkins"
+      git config user.name "jenkins-bot"
+
+      git commit -am "update image ${IMAGE_TAG}"
+      git push
+    """
+  }
+}
+
+        
+
         // ---------------------------------------
         // Stage 4: Store Metadata in OpenSearch
         // ---------------------------------------
