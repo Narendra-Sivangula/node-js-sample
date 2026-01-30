@@ -184,8 +184,8 @@ stage('Update Deployment Repo') {
 
       sed -i 's|image:.*|image: narendrasivangula/node-js:${IMAGE_TAG}|' deployment.yaml
 
-      git config user.email "ci@jenkins"
-      git config user.name "jenkins-bot"
+      git config user.email "narendrakumarsivangula@gmail.com"
+      git config user.name "Narendra-Sivangula"
 
       git commit -am "update image ${IMAGE_TAG}"
       git push
