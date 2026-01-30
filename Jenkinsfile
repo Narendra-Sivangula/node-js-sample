@@ -6,7 +6,7 @@ pipeline {
 
         // -----------------------------
         // Stage 1: Checkout Source
-        // -----------------------------
+        // ----------------------------
         stage('Checkout') {
             steps {
                 checkout scm
