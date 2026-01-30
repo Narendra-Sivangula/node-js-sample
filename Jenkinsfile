@@ -181,7 +181,7 @@ mv $tmp build-metadata.json
 stage("Update Deployment Repo") {
   steps {
     withCredentials([usernamePassword(
-      credentialsId: 'github-status-token',
+      credentialsId: 'Narendra-Traceability',
       usernameVariable: 'GIT_USER',
       passwordVariable: 'GIT_TOKEN'
     )]) {
