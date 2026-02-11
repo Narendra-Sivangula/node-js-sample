@@ -3,7 +3,8 @@ var app = express()
 
 // Automated using ArgoCD And included image_digest - Latest
 // For Testing
-// Final Testing
+
+// Last Full End To End Testing
 app.set('port', (process.env.PORT || 5000))
 app.use(express.static(__dirname + '/public'))
 
