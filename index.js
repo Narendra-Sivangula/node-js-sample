@@ -1,6 +1,12 @@
 var express = require('express')
 var app = express()
 
+// Crashloop Testing Simulation
+if (process.env.CRASH_ON_START === 'true') {
+  console.error('CRASH_ON_START=true, exiting for controlled crash-loop test')
+  process.exit(1)
+}
+
 // Automated using ArgoCD And included image_digest - Latest
 // For Testing
 
