@@ -1,7 +1,7 @@
 var express = require('express')
 var app = express()
 
-// Crashloop Testing Simulation
+// Crashloop Testing Simulation - version01
 if (process.env.CRASH_ON_START === 'true') {
   console.error('CRASH_ON_START=true, exiting for controlled crash-loop test')
   process.exit(1)
