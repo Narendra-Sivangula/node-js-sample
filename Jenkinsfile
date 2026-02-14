@@ -2,6 +2,11 @@ pipeline {
 
     agent any
 
+    environment {
+        BUILD_START_TIME = "${System.currentTimeMillis()}"
+        IMAGE_NAME = "narendra115c/node-js"
+    }
+
     stages {
 
         // ----------------------------
@@ -37,14 +42,12 @@ pipeline {
                     if (rawCommits) {
                         rawCommits.split("\\n").each { line ->
                             def parts = line.split("\\|", 4)
-
                             commitList << [
                                 commit_id: parts[0],
                                 author   : parts[1],
                                 email    : parts[2],
                                 message  : parts[3]
                             ]
-
                             authorSet << "${parts[1]} <${parts[2]}>"
                         }
                     }
@@ -54,22 +57,21 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    env.IMAGE_NAME = "narendra115c/node-js"
                     def safeJob = env.JOB_NAME.toLowerCase().replaceAll("[^a-z0-9_.-]", "-")
                     env.IMAGE_TAG = "${safeJob}-${env.BUILD_NUMBER}-${env.SHORT_COMMIT}"
 
-
                     def payload = [
-                        build_id     : env.BUILD_ID_TRACE,
-                        job_name     : env.JOB_NAME,
-                        build_number : env.BUILD_NUMBER.toInteger(),
-                        branch       : env.BRANCH_NAME,
-                        image_name   : env.IMAGE_NAME,
-                        image_tag    : env.IMAGE_TAG,
-                        commits      : commitList,
-                        authors      : authorSet.toList(),
-                        build_status : currentBuild.currentResult,
-                        timestamp    : new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
+                        build_id        : env.BUILD_ID_TRACE,
+                        job_name        : env.JOB_NAME,
+                        build_number    : env.BUILD_NUMBER.toInteger(),
+                        branch          : env.BRANCH_NAME,
+                        image_name      : env.IMAGE_NAME,
+                        image_tag       : env.IMAGE_TAG,
+                        commits         : commitList,
+                        authors         : authorSet.toList(),
+                        build_status    : currentBuild.currentResult,
+                        build_start_ms  : env.BUILD_START_TIME.toLong(),
+                        timestamp       : new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
                     ]
 
                     writeFile(
@@ -90,16 +92,6 @@ pipeline {
         stage('Build & Push Docker Image') {
             steps {
                 script {
-
-                    def safeJob = env.JOB_NAME.toLowerCase()
-                        .replaceAll("[^a-z0-9_.-]", "-")
-
-                    def shortCommit = sh(
-                        script: "git rev-parse --short HEAD",
-                        returnStdout: true
-                    ).trim()
-
-                    def imageTag = env.IMAGE_TAG
 
                     podTemplate(
                         yaml: """
@@ -145,8 +137,7 @@ spec:
                                 env.IMAGE_DIGEST = sh(
                                     script: """
 echo '${kanikoOutput}' \
- | grep -o 'sha256:[a-f0-9]\\{64\\}' \
- | head -n 1
+ | grep -o 'sha256:[a-f0-9]\\{64\\}' | head -n 1
 """,
                                     returnStdout: true
                                 ).trim()
@@ -154,11 +145,9 @@ echo '${kanikoOutput}' \
                                 if (!env.IMAGE_DIGEST) {
                                     error "IMAGE DIGEST NOT FOUND"
                                 }
-
-                                echo "IMAGE DIGEST = ${env.IMAGE_DIGEST}"
                             }
 
-                            // Inject digest into JSON
+                            // Inject image digest
                             sh '''
 tmp=$(mktemp)
 head -n -1 build-metadata.json > $tmp
@@ -167,10 +156,6 @@ echo '}' >> $tmp
 mv $tmp build-metadata.json
 '''
 
-                            echo "===== AFTER INJECTION ====="
-                            sh "cat build-metadata.json"
-
-                            // IMPORTANT: Re-stash updated file
                             stash name: 'build-metadata-updated', includes: 'build-metadata.json'
                         }
                     }
@@ -178,45 +163,59 @@ mv $tmp build-metadata.json
             }
         }
 
-stage("Update Deployment Repo") {
-  steps {
-    withCredentials([usernamePassword(
-      credentialsId: 'Traceability',
-      usernameVariable: 'GIT_USER',
-      passwordVariable: 'GIT_TOKEN'
-    )]) {
+        // ---------------------------------------
+        // Stage 4: Update Deployment Repo
+        // ---------------------------------------
+        stage("Update Deployment Repo") {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'Traceability',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
 
-      sh '''
-        rm -rf node-js-deployment
+                    sh '''
+rm -rf node-js-deployment
+git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/Narendra-Sivangula/node-js-deployment.git
+cd node-js-deployment
 
-        git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/Narendra-Sivangula/node-js-deployment.git
-        cd node-js-deployment
+sed -i "s|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|" deployment.yaml
 
-        sed -i "s|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|" deployment.yaml
+git config user.email "narendrakumarsivangula@gmail.com"
+git config user.name "Narendra-Sivangula"
 
-        git config user.email "narendrakumarsivangula@gmail.com"
-        git config user.name "Narendra-Sivangula"
-
-        git add deployment.yaml
-        git commit -m "update image ${IMAGE_TAG}" || echo "No changes to commit"
-
-        git push origin main
-      '''
-    }
-  }
-}
-
-
-        
+git add deployment.yaml
+git commit -m "update image ${IMAGE_TAG}" || echo "No changes"
+git push origin main
+'''
+                }
+            }
+        }
 
         // ---------------------------------------
-        // Stage 4: Store Metadata in OpenSearch
+        // Stage 5: Store Metadata in OpenSearch
         // ---------------------------------------
         stage('Store Metadata in OpenSearch') {
             steps {
 
-                // Unstash updated metadata
                 unstash 'build-metadata-updated'
+
+                script {
+                    def endTime = System.currentTimeMillis()
+                    def startTime = env.BUILD_START_TIME.toLong()
+                    def durationMs = endTime - startTime
+                    def durationSec = (durationMs / 1000).intValue()
+
+                    sh """
+tmp=\$(mktemp)
+head -n -1 build-metadata.json > \$tmp
+echo '  ,"build_end_ms": $endTime' >> \$tmp
+echo '  ,"build_duration_ms": $durationMs' >> \$tmp
+echo '  ,"build_duration_sec": $durationSec' >> \$tmp
+echo '}' >> \$tmp
+mv \$tmp build-metadata.json
+"""
+                }
 
                 sh """
 echo "===== FINAL METADATA ====="
