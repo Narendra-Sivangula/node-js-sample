@@ -8,7 +8,7 @@ RUN npm install --only=production
 
 COPY . .
 
-#--------------- CI TRACEABILITY ---------------------
+#--------------- CI TRACEABILITY FOR OBSERVABILITY ---------------------
 ARG BUILD_ID
 ARG IMAGE_TAG
 ARG JOB_NAME
